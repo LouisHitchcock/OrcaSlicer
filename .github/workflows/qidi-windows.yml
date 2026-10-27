@@ -1,0 +1,23 @@
+name: Build OrcaSlicer with Qidi profiles (Windows x64)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/qidistudio-q-series
+    paths:
+      - '.github/workflows/qidi-windows.yml'
+      - 'resources/profiles/Q Series.json'
+      - 'resources/profiles/Q Series/**'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    uses: ./.github/workflows/build_check_cache.yml
+    with:
+      os: windows-latest
+      arch: x64
+      compiler: clang
+    secrets: inherit
