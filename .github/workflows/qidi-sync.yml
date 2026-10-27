@@ -1,0 +1,75 @@
+name: Sync QidiStudio Q Series profiles
+
+on:
+  push:
+    branches: [feature/qidistudio-q-series]
+    paths:
+      - '.github/workflows/qidi-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-qidi:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout OrcaSlicer fork
+        uses: actions/checkout@v4
+        with:
+          ref: feature/qidistudio-q-series
+          persist-credentials: true
+      - name: Checkout official QidiStudio profile source
+        uses: actions/checkout@v4
+        with:
+          repository: QIDITECH/QIDIStudio
+          ref: main
+          path: external/qidistudio
+          sparse-checkout: |
+            resources/profiles/Q Series.json
+            resources/profiles/Q Series
+      - name: Install original system profile bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "external/qidistudio/resources/profiles/Q Series.json"
+          test -d "external/qidistudio/resources/profiles/Q Series"
+          cp "external/qidistudio/resources/profiles/Q Series.json" "resources/profiles/Q Series.json"
+          rm -rf "resources/profiles/Q Series"
+          cp -R "external/qidistudio/resources/profiles/Q Series" "resources/profiles/Q Series"
+      - name: Verify every indexed profile exists and parses
+        shell: python
+        run: |
+          import json, pathlib, sys
+          root = pathlib.Path("resources/profiles")
+          vendor = json.loads((root / "Q Series.json").read_text(encoding="utf-8"))
+          errors = []
+          count = 0
+          for category in ("machine_model", "machine", "process", "filament"):
+              for entry in vendor.get(category + "_list", []):
+                  path = root / "Q Series" / entry["sub_path"]
+                  if not path.is_file():
+                      errors.append(f"Missing {path}")
+                      continue
+                  try:
+                      json.loads(path.read_text(encoding="utf-8"))
+                      count += 1
+                  except Exception as exc:
+                      errors.append(f"{path}: {exc}")
+          print(f"Parsed {count} indexed Qidi profile files")
+          if errors:
+              print("\n".join(errors), file=sys.stderr)
+              sys.exit(1)
+      - name: Commit imported profiles to fork
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "resources/profiles/Q Series.json" "resources/profiles/Q Series"
+          if git diff --cached --quiet; then
+            echo "No profile changes"
+          else
+            git commit -m "Import QidiStudio Q Series printer, process and filament profiles"
+            git push origin HEAD:feature/qidistudio-q-series
+          fi
